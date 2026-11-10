@@ -5,86 +5,179 @@
   <meta charset="UTF-8">
   <meta name="viewport"
         content="width=device-width, initial-scale=1">
-  <title>TEST 12A - Bridge</title>
+  <title>TEST 12C - Voice Bridge</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      max-width: 520px;
-      margin: 50px auto;
-      padding: 20px;
-      text-align: center;
+      max-width: 650px;
+      margin: 30px auto;
+      padding: 16px;
+      background: #f8fafc;
+      color: #172033;
     }
+    h2 { text-align: center; }
     button {
+      display: block;
+      width: 100%;
+      padding: 16px;
+      margin: 12px 0;
+      border: 0;
+      border-radius: 12px;
       background: #1769aa;
       color: white;
-      border: none;
-      border-radius: 12px;
-      padding: 16px 24px;
       font-size: 17px;
+      font-weight: bold;
+      cursor: pointer;
     }
-    #result {
-      margin-top: 24px;
-      padding: 20px;
-      background: #f1f5f9;
+    .card {
+      background: white;
       border-radius: 12px;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-      text-align: left;
+      padding: 16px;
+      margin-top: 14px;
+      box-shadow: 0 2px 8px #00000010;
     }
+    .number {
+      font-size: 30px;
+      font-weight: bold;
+      color: #1769aa;
+    }
+    .item {
+      padding: 9px 0;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .muted { color: #64748b; }
+    #status { overflow-wrap: anywhere; }
   </style>
 </head>
 <body>
-  <h2>🎙️ TEST 12A</h2>
-  <p>Kiểm tra GitHub Pages kết nối Apps Script Bridge</p>
 
-  <button onclick="testBridge()">
-    KIỂM TRA KẾT NỐI
+  <h2>🎙️ TEST 12C</h2>
+  <p class="muted">
+    Kết nối thực đơn căn tin qua Apps Script Bridge.
+    Chỉ đọc, không cập nhật dữ liệu.
+  </p>
+
+  <button onclick="loadSnapshot()">
+    ĐỌC THỰC ĐƠN THẬT
   </button>
 
-  <div id="result">Chưa kiểm tra</div>
+  <div class="card" id="status">
+    Chưa kết nối.
+  </div>
 
-  <script>
-    const BRIDGE_URL =
-      'https://script.google.com/macros/s/AKfycbyHG8wFcZB1kZwqCjAHEsp8u4qARgMEjUCRuCzcILuQCdiFbYiFnAy4jNHD-d4FlgUY/exec';
+  <div class="card" id="summary" hidden>
+    <div>Ngày: <b id="date"></b></div>
+    <p>Đợt đang bán hợp lệ</p>
+    <div class="number" id="sellingCount">0</div>
+    <p>Món có thể lên hợp lệ</p>
+    <div class="number" id="availableCount">0</div>
+  </div>
 
-    function testBridge() {
-      const result = document.getElementById('result');
-      result.textContent = 'Đang kết nối...';
+  <div class="card" id="sellingCard" hidden>
+    <h3>🟢 Đang bán</h3>
+    <div id="sellingList"></div>
+  </div>
 
-      const callback =
-        'voiceTest11Cb_' + Date.now();
+  <div class="card" id="availableCard" hidden>
+    <h3>📋 Món có thể lên (10 món đầu)</h3>
+    <div id="availableList"></div>
+  </div>
 
-      const script = document.createElement('script');
-      let finished = false;
+<script>
+const BRIDGE_URL =
+  'https://script.google.com/macros/s/AKfycbyHG8wFcZB1kZwqCjAHEsp8u4qARgMEjUCRuCzcILuQCdiFbYiFnAy4jNHD-d4FlgUY/exec';
 
-      const timer = setTimeout(function() {
-        finish('HẾT THỜI GIAN: Bridge không phản hồi.');
-      }, 15000);
+function show(id) {
+  document.getElementById(id).hidden = false;
+}
 
-      function finish(message) {
-        if (finished) return;
-        finished = true;
-        clearTimeout(timer);
-        script.remove();
-        delete window[callback];
-        result.textContent = message;
-      }
+function setText(id, value) {
+  document.getElementById(id).textContent = value;
+}
 
-      window[callback] = function(data) {
-        finish(JSON.stringify(data, null, 2));
-      };
+function renderItems(id, items, withBatch) {
+  const box = document.getElementById(id);
+  box.replaceChildren();
 
-      script.onerror = function() {
-        finish('LỖI: Không tải được JSONP từ Bridge.');
-      };
+  items.forEach(function(m) {
+    const row = document.createElement('div');
+    row.className = 'item';
 
-      script.src =
-        BRIDGE_URL +
-        '?action=ping&callback=' +
-        encodeURIComponent(callback);
+    const title = document.createElement('strong');
+    title.textContent = m.tenMon;
 
-      document.head.appendChild(script);
+    const info = document.createElement('div');
+    info.className = 'muted';
+    info.textContent =
+      m.maMon + (withBatch ? ' | ' + m.maDotBan : '');
+
+    row.appendChild(title);
+    row.appendChild(info);
+    box.appendChild(row);
+  });
+}
+
+function loadSnapshot() {
+  setText('status', 'Đang đọc dữ liệu từ Bridge...');
+
+  const callback =
+    'voiceTest11Cb_' +
+    Date.now() + '_' +
+    Math.floor(Math.random() * 100000);
+
+  const script = document.createElement('script');
+  let finished = false;
+
+  const timer = setTimeout(function() {
+    finish('Hết thời gian chờ phản hồi.');
+  }, 20000);
+
+  function finish(message, data) {
+    if (finished) return;
+    finished = true;
+
+    clearTimeout(timer);
+    script.remove();
+    delete window[callback];
+
+    setText('status', message);
+
+    if (!data || !data.ok) return;
+
+    setText('date', data.ngay);
+    setText('sellingCount', data.soDotDangBanHopLe);
+    setText('availableCount', data.soMonCoTheLenHopLe);
+
+    renderItems('sellingList', data.dangBan, true);
+    renderItems('availableList', data.coTheLen.slice(0,10), false);
+
+    show('summary');
+    show('sellingCard');
+    show('availableCard');
+  }
+
+  window[callback] = function(data) {
+    if (!data || !data.ok) {
+      finish('Bridge trả về lỗi: ' +
+        (data && data.message || 'Không xác định'));
+      return;
     }
-  </script>
+
+    finish('Đọc thực đơn thành công!', data);
+  };
+
+  script.onerror = function() {
+    finish('Không tải được dữ liệu JSONP.');
+  };
+
+  script.src =
+    BRIDGE_URL +
+    '?action=snapshot&callback=' +
+    encodeURIComponent(callback) +
+    '&_=' + Date.now();
+
+  document.head.appendChild(script);
+}
+</script>
 </body>
 </html>
