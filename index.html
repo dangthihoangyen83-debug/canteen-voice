@@ -1,7 +1,7 @@
 <!doctype html>
-<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Giọng nói căn tin - TEST 05</title>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Giọng nói căn tin - TEST 06</title>
 <style>*{box-sizing:border-box}body{margin:0;background:#f4f3fa;color:#202437;font:18px/1.5 system-ui,Arial}.wrap{max-width:760px;margin:auto;padding:20px}.card{background:#fff;border-radius:18px;padding:22px;box-shadow:0 4px 20px #23234b12}h1{font-size:29px;line-height:1.2}h2{font-size:21px;margin:22px 0 8px}button{border:0;border-radius:12px;padding:14px 18px;font-size:18px;font-weight:650;cursor:pointer;margin:5px 5px 5px 0;background:#673cc7;color:white}button.secondary{background:#e9e4f5;color:#35216c}button:disabled{opacity:.45}textarea{width:100%;min-height:110px;font:18px system-ui;border:1px solid #c6c3d0;border-radius:12px;padding:12px}pre,.panel{white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f4f9;border-radius:12px;padding:15px;margin:8px 0}.ok{color:#087348}.err{color:#b42318}.warn{color:#875b00}.muted{color:#626779;font-size:15px}.cmd{padding:12px;border-bottom:1px solid #e2dfeb}.cmd:last-child{border:0}.pill{display:inline-block;padding:2px 8px;background:#eae5fa;border-radius:8px;font-size:14px}.status{background:#eee9fc;padding:12px;border-radius:12px}</style></head><body><main class="wrap"><div class="card">
-<h1>🎙️ Giọng nói căn tin · TEST 05</h1><p>Nghe nhiều lệnh trong một phiên, tách cả khi không có “rồi”. <strong>Chỉ thử nghiệm, không ghi Google Sheets.</strong></p>
+<h1>🎙️ Giọng nói căn tin · TEST 06</h1><p>Nghe nhiều lệnh trong một phiên, tách cả khi không có “rồi”. <strong>Chỉ thử nghiệm, không ghi Google Sheets.</strong></p>
 <button id="start">🎤 Bắt đầu nghe</button><button id="stop" class="secondary" disabled>⏹ Dừng nghe</button><button id="reset" class="secondary">↺ Xóa phiên</button>
 <div id="status" class="status" aria-live="polite">Sẵn sàng.</div>
 <h2>Đang nhận diện (tạm thời)</h2><div id="interim" class="panel muted">Chưa có</div>
@@ -9,7 +9,7 @@
 <h2>Nhập thử / bổ sung lệnh</h2><textarea id="manual" placeholder="Ví dụ: hết cháo ếch, hết bò kho, lên bánh tép 30"></textarea><button id="analyze">🧪 Phân tích câu nhập</button><button id="append" class="secondary">➕ Bổ sung vào phiên</button>
 <h2>Kết quả phân tích</h2><div id="results" class="panel">Chưa có lệnh.</div>
 <h2>Danh mục thử nghiệm</h2><div class="panel muted">Bò kho · Cháo ếch · Cá basa kho tiêu · Sườn non kho thơm · Thịt xào măng · Bánh bao nhân thịt · Cháo thịt heo · Bún Bò Huế · Bánh tép</div>
-<p class="muted">Danh mục trên là dữ liệu mẫu, không phản ánh món đang bán hoặc đã hết. TEST 05 không kết nối Apps Script. Web Speech API có thể truyền âm thanh đến dịch vụ nhận diện của nhà cung cấp trình duyệt.</p>
+<p class="muted">Danh mục trên là dữ liệu mẫu, không phản ánh món đang bán hoặc đã hết. TEST 06 không kết nối Apps Script. Web Speech API có thể truyền âm thanh đến dịch vụ nhận diện của nhà cung cấp trình duyệt.</p>
 <div id="tech" class="muted"></div></div></main>
 <script>
 'use strict';
@@ -25,13 +25,102 @@ function parsePiece(p){let raw=p.text.replace(/^\s*(món|là)\s+/u,'').trim();le
 if(!match.length)return {action:p.action,raw,error:'Không tìm thấy tên món trong danh mục mẫu.'};match.sort((a,b)=>b.key.length-a.key.length);let best=match[0];let remaining=raw.replace(best.key,'').trim();let qty=null;
 if(['THEM','THEM_LAI'].includes(p.action)){let m=remaining.match(/^(\d+)\s*(phần|suất|phần ăn)?$/u);if(m)qty=Number(m[1]);if(!Number.isSafeInteger(qty)||qty<=0)return {action:p.action,name:best.name,raw,error:'Thiếu số lượng nguyên dương. Ví dụ: “lên '+best.name+' 30”.'};}else if(remaining)return {action:p.action,name:best.name,raw,error:'Có từ hoặc số lượng dư, cần kiểm tra lại: '+remaining};
 return {action:p.action,name:best.name,qty,raw};}
-let chunks=[];let finalText='';let recognition=null;let listening=false;let timer=null;let session=0;let lastCommitted='';
-function setStatus(s){$('status').textContent=s}function clearTimer(){if(timer){clearTimeout(timer);timer=null}}
-function render(){let items=chunks.flatMap(c=>tokenize(c)).filter(p=>p.text||p.action).map(parsePiece);$('transcript').textContent=chunks.join(' | ')||'Chưa có';if(!items.length){$('results').textContent='Chưa có lệnh.';return}let html=items.map((v,i)=>{let line=v.action+(v.name?' | '+v.name:'')+(v.qty?' | '+v.qty+' phần':'');return '<div class="cmd"><strong class="'+(v.error?'err':'ok')+'">'+(v.error?'❌':'✅')+' Lệnh '+(i+1)+'</strong><div>'+escapeHtml(line)+'</div>'+(v.error?'<div class="warn">'+escapeHtml(v.error)+'</div>':'')+'</div>'}).join('');let bad=items.some(x=>x.error);$('results').innerHTML=html+'<p class="'+(bad?'err':'ok')+'"><strong>'+(bad?'⚠️ Có lệnh chưa hợp lệ. KHÔNG LƯU.':'✅ Cú pháp hợp lệ trong danh mục mẫu. CHƯA LƯU.')+'</strong></p>'}
+let chunks=[];
+let recognition=null, listening=false, timer=null, session=0;
+let runFinal='',runInterim='',runCommitted=false;
+function setStatus(s){$('status').textContent=s}
+function clearTimer(){if(timer!==null){clearTimeout(timer);timer=null}}
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function addChunk(s){s=norm(s);if(!s)return;chunks.push(s);render();clearTimer();timer=setTimeout(()=>{render();setStatus('Đã im lặng 3 giây. Phân tích xong, không ghi dữ liệu.')},3000)}
-function stop(){listening=false;session++;clearTimer();if(recognition){try{recognition.stop()}catch(e){}}$('start').disabled=false;$('stop').disabled=true;setStatus('Đã dừng nghe.');render()}
-$('start').onclick=()=>{let SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){setStatus('Trình duyệt không hỗ trợ SpeechRecognition.');return}if(listening)return;listening=true;session++;const current=session;recognition=new SR();recognition.lang='vi-VN';recognition.continuous=true;recognition.interimResults=true;finalText='';lastCommitted='';$('start').disabled=true;$('stop').disabled=false;setStatus('Đang nghe...');recognition.onresult=e=>{if(current!==session)return;let interim='';let finals=[];for(let i=0;i<e.results.length;i++){let r=e.results[i];if(r.isFinal)finals.push(r[0].transcript);else interim+=r[0].transcript+' '}let complete=norm(finals.join(' '));$('interim').textContent=interim.trim()||'Không có nội dung tạm thời';if(complete&&complete!==lastCommitted){let addition=complete.startsWith(lastCommitted)?complete.slice(lastCommitted.length).trim():complete;lastCommitted=complete;if(addition)addChunk(addition)}else if(interim.trim()){clearTimer();setStatus('Đang nghe, chờ câu hoàn chỉnh...')}};recognition.onerror=e=>{if(current!==session)return;setStatus('Micro lỗi: '+e.error);if(e.error==='not-allowed'||e.error==='service-not-allowed')stop()};recognition.onend=()=>{if(current!==session)return;listening=false;$('start').disabled=false;$('stop').disabled=true;setStatus('Micro đã dừng. Bấm Bắt đầu nghe để tiếp tục.');};try{recognition.start()}catch(e){stop();setStatus('Không khởi động được: '+e.message)}};
-$('stop').onclick=stop;$('reset').onclick=()=>{stop();chunks=[];$('manual').value='';$('interim').textContent='Chưa có';render();setStatus('Đã xóa phiên.');};$('analyze').onclick=()=>{stop();chunks=[];addChunk($('manual').value);};$('append').onclick=()=>addChunk($('manual').value);
+function render(){
+  const all=chunks.join(' ').trim();
+  const items=all?tokenize(all).filter(p=>p.text||p.action).map(parsePiece):[];
+  $('transcript').textContent=all||'Chưa có';
+  if(!items.length){$('results').textContent='Chưa có lệnh.';return}
+  let html=items.map((v,i)=>{
+    let line=v.action+(v.name?' | '+v.name:'')+(v.qty?' | '+v.qty+' phần':'');
+    return '<div class="cmd"><strong class="'+(v.error?'err':'ok')+'">'+(v.error?'❌':'✅')+' Lệnh '+(i+1)+'</strong><div>'+escapeHtml(line)+'</div>'+(v.error?'<div class="warn">'+escapeHtml(v.error)+'</div>':'')+'</div>';
+  }).join('');
+  let bad=items.some(x=>x.error);
+  $('results').innerHTML=html+'<p class="'+(bad?'err':'ok')+'"><strong>'+(bad?'⚠️ Có lệnh chưa hợp lệ. KHÔNG LƯU.':'✅ Cú pháp hợp lệ trong danh mục mẫu. CHƯA LƯU.')+'</strong></p>';
+}
+function commitRun(){
+  if(runCommitted)return;
+  runCommitted=true;
+  const text=norm(runFinal||runInterim);
+  if(text)chunks.push(text);
+  runFinal='';runInterim='';
+  $('interim').textContent='Không có nội dung tạm thời';
+  render();
+}
+function finishRun(message){
+  clearTimer();
+  commitRun();
+  listening=false;
+  session++;
+  const old=recognition;recognition=null;
+  if(old){try{old.stop()}catch(e){}}
+  $('start').disabled=false;$('stop').disabled=true;
+  setStatus(message);
+}
+function scheduleFinish(){
+  clearTimer();
+  timer=setTimeout(()=>{
+    if(!listening)return;
+    finishRun('Đã im lặng 3 giây. Phân tích xong, không ghi dữ liệu.');
+  },3000);
+}
+$('start').onclick=()=>{
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){setStatus('Trình duyệt không hỗ trợ SpeechRecognition.');return}
+  if(listening)return;
+  clearTimer();listening=true;session++;
+  const current=session;
+  runFinal='';runInterim='';runCommitted=false;
+  recognition=new SR();recognition.lang='vi-VN';recognition.continuous=true;recognition.interimResults=true;
+  $('start').disabled=true;$('stop').disabled=false;
+  setStatus('Đang nghe...');
+  recognition.onresult=e=>{
+    if(current!==session)return;
+    let finals=[],interims=[];
+    // e.results là ảnh chụp toàn bộ kết quả hiện tại, KHÔNG phải các mảnh mới để nối tiếp.
+    for(let i=0;i<e.results.length;i++){
+      const r=e.results[i];const t=(r[0]&&r[0].transcript)||'';
+      if(r.isFinal)finals.push(t);else interims.push(t);
+    }
+    runFinal=norm(finals.join(' '));runInterim=norm(interims.join(' '));
+    $('interim').textContent=runInterim||'Không có nội dung tạm thời';
+    $('transcript').textContent=[...chunks,runFinal,runInterim].filter(Boolean).join(' ')||'Chưa có';
+    setStatus('Đang nghe. Chờ 3 giây không có kết quả mới...');
+    scheduleFinish();
+  };
+  recognition.onspeechstart=()=>{if(current!==session)return;clearTimer();setStatus('Đang nghe giọng nói...')};
+  recognition.onerror=e=>{
+    if(current!==session)return;
+    finishRun('Micro lỗi: '+e.error+'. Chưa lưu dữ liệu.');
+  };
+  recognition.onend=()=>{
+    if(current!==session)return;
+    finishRun('Trình duyệt đã kết thúc lượt nghe. Đã phân tích, không ghi dữ liệu.');
+  };
+  try{recognition.start()}catch(e){finishRun('Không khởi động được: '+e.message)}
+};
+$('stop').onclick=()=>{
+  if(listening)finishRun('Đã dừng nghe. Đã phân tích, không ghi dữ liệu.');
+};
+$('reset').onclick=()=>{
+  if(listening)finishRun('Đã dừng nghe.');
+  clearTimer();chunks=[];runFinal='';runInterim='';
+  $('manual').value='';$('interim').textContent='Chưa có';render();setStatus('Đã xóa phiên.');
+};
+$('analyze').onclick=()=>{
+  if(listening)finishRun('Đã dừng nghe.');
+  clearTimer();chunks=[];const value=norm($('manual').value);if(value)chunks.push(value);
+  render();setStatus('Đã phân tích câu nhập. Không ghi dữ liệu.');
+};
+$('append').onclick=()=>{
+  if(listening)finishRun('Đã dừng nghe.');
+  const value=norm($('manual').value);if(value)chunks.push(value);
+  $('manual').value='';render();setStatus('Đã bổ sung câu nhập. Không ghi dữ liệu.');
+};
 $('tech').textContent='HTTPS: '+window.isSecureContext+' | iframe: '+(window.top!==window.self)+' | SpeechRecognition: '+!!(window.SpeechRecognition||window.webkitSpeechRecognition);
 </script></body></html>
