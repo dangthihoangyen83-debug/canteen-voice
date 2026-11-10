@@ -3,21 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Giọng nói căn tin - TEST 08</title>
+<title>Giọng nói căn tin - TEST 09</title>
 <style>
 *{box-sizing:border-box}body{font-family:system-ui,Arial,sans-serif;background:#f6f7fb;color:#1c2540;margin:0;padding:18px}main{max-width:720px;margin:auto;background:#fff;padding:22px;border-radius:18px;box-shadow:0 4px 20px #0001}h1{font-size:27px;color:#075f55}h2{font-size:19px;margin-top:24px}p{line-height:1.5}button{border:0;border-radius:12px;padding:15px 18px;font-size:18px;color:white;background:#6941c6;margin:5px 7px 5px 0}button.stop{background:#b42318}button:disabled{opacity:.45}.panel{background:#f2f4f8;border-radius:12px;padding:15px;min-height:58px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:17px}.muted{color:#64748b}.status{padding:13px;background:#eaf6f2;border-radius:10px;margin-top:12px}small{line-height:1.6;display:block;color:#5b6473;margin-top:22px}
 </style>
 </head>
 <body><main>
-<h1>🎙️ Giọng nói căn tin · TEST 08</h1>
-<p>Nói <strong>một câu chứa tối đa hai lệnh</strong>, ví dụ “Hết bò kho, hết cháo ếch”. Kiểm tra nhận diện và phân tích tối đa 2 lệnh. <strong>Không ghi hoặc sửa thực đơn</strong>.</p>
+<h1>🎙️ Giọng nói căn tin · TEST 09</h1>
+<p>Nói tối đa <strong>2 lệnh</strong>: “Hết bò kho” hoặc “Lên cháo ếch 30”. Từ “thêm” cũng được hiểu là “lên”. <strong>Chỉ mô phỏng, không ghi Google Sheets.</strong></p>
 <button id="start">🎙️ Bắt đầu nghe</button><button class="stop" id="stop" disabled>■ Dừng nghe</button>
 <div id="status" class="status" role="status">Sẵn sàng kiểm tra.</div>
 <h2>Đang nhận diện (tạm thời)</h2><div id="interim" class="panel muted">Chưa có</div>
 <h2>Câu cuối cùng</h2><div id="final" class="panel">Chưa có</div>
-<h2>Kết quả sau 3 giây</h2><div id="preview" class="panel">Chưa có</div>
-<h2>Danh mục món mẫu</h2><div id="catalog" class="panel muted">Bò kho · Cháo ếch · Bánh tép · Cơm gà · Bún bò · Canh chua</div>
-<h2>Thông tin kỹ thuật</h2><div id="technical" class="panel"></div>
+<h2>Kiểm tra lệnh sau 3 giây</h2><div id="preview" class="panel">Chưa có</div>
+<h2>Danh mục mẫu đang kiểm tra</h2><div id="catalog" class="panel muted"></div><h2>Thông tin kỹ thuật</h2><div id="technical" class="panel"></div>
 <small>Trang thử nghiệm không kết nối Google Sheets. Trình duyệt có thể gửi âm thanh tới dịch vụ nhận diện giọng nói của nhà cung cấp. Mở trực tiếp bằng Chrome nếu trình duyệt trong ứng dụng chặn micro.</small>
 </main><script>
 (()=>{'use strict';
@@ -25,65 +24,81 @@ const el=id=>document.getElementById(id);
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 let recognition=null,session=0,quietTimer=null,finalText='',interimText='',lastActivity=0,finished=false;
 const clean=t=>String(t||'').replace(/\s+/g,' ').trim();
+// TEST 09: danh mục MẪU, không truy cập Google Sheets.
+// Các tên món và trạng thái dưới đây chỉ dùng kiểm thử logic.
+const FOOD=['bò kho','cháo ếch','bánh tép','cơm gà','bún bò','canh chua'];
+const TODAY=['bò kho','cháo ếch','cơm gà'];
+const SOLD_OUT=['cháo ếch'];
+const norm=t=>clean(t).toLocaleLowerCase('vi-VN').replace(/[.,;!?]+/g,' ').replace(/\s+/g,' ').trim();
+const small={không:0,một:1,mốt:1,hai:2,ba:3,bốn:4,tư:4,năm:5,lăm:5,sáu:6,bảy:7,tám:8,chín:9,mười:10};
+function quantity(t){
+ t=norm(t).replace(/\b(phần|suất)\b/g,'').trim();
+ if(/^\d+$/.test(t))return Number(t);
+ if(!t)return NaN;
+ const w=t.split(' ');let n=0,i=0;
+ if(w[0]==='mười'){n=10;i=1;if(i<w.length&&small[w[i]]!==undefined){n+=small[w[i]];i++;}}
+ else if(w.length>=2&&small[w[0]]>=1&&w[1]==='mươi'){
+   n=small[w[0]]*10;i=2;if(i<w.length&&small[w[i]]!==undefined){n+=small[w[i]];i++;}
+ }else if(w.length===1&&small[w[0]]!==undefined){n=small[w[0]];i=1;}
+ return i===w.length?n:NaN;
+}
+function parseVoice(raw){
+ const sentence=norm(raw);
+ if(!sentence)return {ok:false,message:'Chưa nhận được câu nói cuối cùng.'};
+ // Mỗi lệnh bắt đầu bằng từ khóa. Không tự suy diễn hành động.
+ const matches=[...sentence.matchAll(/(?:^|\s)(hết|lên|thêm)(?=\s|$)/g)];
+ if(!matches.length)return {ok:false,message:'Không nhận ra lệnh. Hãy nói “Hết tên món” hoặc “Lên tên món số lượng”.'};
+ const leading=sentence.slice(0,matches[0].index).trim();
+ if(leading)return {ok:false,message:'Có từ không thuộc lệnh: “'+leading+'”. Vui lòng nói lại.'};
+ if(matches.length>2)return {ok:false,message:'Mỗi phiên tối đa 2 lệnh. Vui lòng nói lại.'};
+ const actions=[];
+ for(let i=0;i<matches.length;i++){
+   const m=matches[i],start=m.index+m[0].length,end=i+1<matches.length?matches[i+1].index:sentence.length;
+   const phrase=sentence.slice(start,end).trim();
+   if(!phrase)return {ok:false,message:'Thiếu tên món. Vui lòng nhập lệnh mới.'};
+   const kind=m[1]==='hết'?'HẾT':'LÊN';
+   const catalog=kind==='HẾT'?TODAY:FOOD;
+   // Khớp tên món nguyên vẹn; không tự sửa tên gần giống.
+   const candidates=catalog.filter(name=>phrase===name||(kind==='LÊN'&&phrase.startsWith(name+' '))).sort((a,b)=>b.length-a.length);
+   if(!candidates.length)return {ok:false,message:'Không tìm thấy món phù hợp với “'+phrase+'”. Vui lòng nhập lệnh mới.'};
+   const name=candidates[0];
+   if(kind==='HẾT'){
+     if(phrase!==name)return {ok:false,message:'Lệnh HẾT không cần số lượng. Vui lòng nói lại.'};
+     if(SOLD_OUT.includes(name))return {ok:false,message:'Món “'+name+'” đã báo hết. Vui lòng nhập lệnh mới.'};
+     actions.push('HẾT · '+name+' → đánh dấu hết món trong MENU_HOM_NAY');
+   }else{
+     const tail=phrase.slice(name.length).trim();const count=quantity(tail);
+     if(!Number.isSafeInteger(count)||count<=0)return {ok:false,message:'Món “'+name+'” cần số lượng nguyên dương. Ví dụ: “Lên '+name+' 30”.'};
+     if(TODAY.includes(name)&&!SOLD_OUT.includes(name))return {ok:false,message:'Món “'+name+'” đang bán, không tạo trùng. Vui lòng nhập lệnh mới.'};
+     actions.push('LÊN · '+name+' · '+count+' phần → '+(SOLD_OUT.includes(name)?'tạo đợt bán mới':'thêm vào MENU_HOM_NAY'));
+   }
+ }
+ if(actions.length===2){
+   // Không cho 2 lệnh tác động cùng món trong một phiên.
+   const a=actions.map(x=>x.split(' · ')[1]);
+   if(a[0]===a[1])return {ok:false,message:'Hai lệnh cùng một món. Vui lòng thực hiện riêng từng phiên.'};
+ }
+ return {ok:true,actions};
+}
+el('catalog').textContent='DM_THUC_AN mẫu: '+FOOD.join(', ')+'\nMENU_HOM_NAY mẫu: '+TODAY.join(', ')+'\nĐang hết (mẫu): '+SOLD_OUT.join(', ');
+
 const status=t=>{el('status').textContent=t;};
 const buttons=active=>{el('start').disabled=active;el('stop').disabled=!active;};
 const technical=extra=>{el('technical').textContent='HTTPS an toàn: '+isSecureContext+'\nTrong iframe: '+(self!==top)+'\nSpeechRecognition hỗ trợ: '+Boolean(SR)+(extra?'\n'+extra:'');};
 technical('');
 function clearQuiet(){if(quietTimer!==null){clearTimeout(quietTimer);quietTimer=null;}}
-// TEST 08: bộ phân tích độc lập, không thay đổi cơ chế nhận diện TEST 07.
-const dishCatalog=['bò kho','cháo ếch','bánh tép','cơm gà','bún bò','canh chua'];
-const norm=t=>clean(t).toLocaleLowerCase('vi-VN').replace(/[.,;!?]+/g,' ').replace(/\s+/g,' ').trim();
-const actions=[
- {key:'TẮT NỔI BẬT',re:/^(?:tắt nổi bật|bỏ nổi bật)\b/u},
- {key:'NỔI BẬT',re:/^(?:bật nổi bật|nổi bật)\b/u},
- {key:'THÊM LẠI',re:/^(?:thêm lại|lên lại|bán lại)\b/u},
- {key:'HẾT',re:/^(?:báo hết|hết món|hết)\b/u},
- {key:'THÊM',re:/^(?:thêm món|thêm|lên món|lên)\b/u}
-];
-const commandStart=/(?:tắt nổi bật|bỏ nổi bật|bật nổi bật|nổi bật|thêm lại|lên lại|bán lại|báo hết|hết món|hết|thêm món|thêm|lên món|lên)(?=\s|$)/gu;
-function wordsToNumber(raw){
- const t=norm(raw).replace(/\b(phần|suất)\b/g,'').trim();
- if(/^\d+$/.test(t))return Number(t);
- const digit={'không':0,'một':1,'mốt':1,'hai':2,'ba':3,'bốn':4,'tư':4,'năm':5,'lăm':5,'sáu':6,'bảy':7,'tám':8,'chín':9};
- const tens={'mười':10,'hai mươi':20,'ba mươi':30,'bốn mươi':40,'năm mươi':50,'sáu mươi':60,'bảy mươi':70,'tám mươi':80,'chín mươi':90};
- if(Object.hasOwn(tens,t))return tens[t];
- if(Object.hasOwn(digit,t))return digit[t];
- for(const [k,v] of Object.entries(tens))if(t.startsWith(k+' ')){const tail=t.slice(k.length+1);if(Object.hasOwn(digit,tail)&&digit[tail]>0)return v+digit[tail];}
- if(t.startsWith('mười ')){const tail=t.slice(5);if(Object.hasOwn(digit,tail)&&digit[tail]>0)return 10+digit[tail];}
- return NaN;
-}
-function parseCommands(input){
- const s=norm(input).replace(/\b(rồi|và|sau đó)\b/g,' ').replace(/\s+/g,' ').trim();
- const hits=[...s.matchAll(commandStart)].filter(m=>m.index===0||s[m.index-1]===' ');
- if(!hits.length)return {ok:false,lines:['❌ Không tìm thấy hành động. Hãy nói: “Hết bò kho” hoặc “Lên bò kho 30”.']};
- if(s.slice(0,hits[0].index).trim())return {ok:false,lines:['❌ Có nội dung trước lệnh đầu tiên: '+s.slice(0,hits[0].index)]};
- if(hits.length>2)return {ok:false,lines:['❌ Có '+hits.length+' lệnh, vượt giới hạn 2 lệnh. Không xử lý phiên này.']};
- const lines=[];let valid=true;
- hits.forEach((hit,i)=>{
-  const piece=s.slice(hit.index,i+1<hits.length?hits[i+1].index:s.length).trim();
-  const act=actions.find(a=>a.re.test(piece));
-  if(!act){valid=false;lines.push('❌ Lệnh '+(i+1)+': Không nhận ra hành động.');return;}
-  const rest=piece.replace(act.re,'').trim();
-  const dish=dishCatalog.filter(d=>rest===d||rest.startsWith(d+' ')).sort((a,b)=>b.length-a.length)[0];
-  if(!dish){valid=false;lines.push('❌ Lệnh '+(i+1)+': Không tìm thấy tên món trong danh mục mẫu: “'+rest+'”.');return;}
-  const tail=rest.slice(dish.length).trim();
-  if(act.key==='THÊM'||act.key==='THÊM LẠI'){
-   const qty=wordsToNumber(tail);
-   if(!Number.isSafeInteger(qty)||qty<=0){valid=false;lines.push('❌ Lệnh '+(i+1)+': “'+dish+'” cần số lượng nguyên dương, ví dụ 30.');return;}
-   lines.push('✅ Lệnh '+(i+1)+': '+act.key+' · '+dish+' · '+qty+' phần');
-  }else{
-   if(tail){valid=false;lines.push('❌ Lệnh '+(i+1)+': Có nội dung thừa sau “'+dish+'”: '+tail);return;}
-   lines.push('✅ Lệnh '+(i+1)+': '+act.key+' · '+dish);
-  }
- });
- return {ok:valid,lines};
-}
 function showResult(){
  if(finished)return;
  finished=true;
  clearQuiet();
  const text=clean(finalText);
- if(text){const parsed=parseCommands(text);el('preview').textContent='🧪 Câu nhận diện: '+text+'\n\n'+parsed.lines.join('\n')+'\n\n'+(parsed.ok?'✅ Phân tích hợp lệ (chỉ mô phỏng).':'⚠️ Có lỗi, không xử lý bất kỳ lệnh nào.')+'\nKHÔNG ghi dữ liệu.';status(parsed.ok?'Đã phân tích xong. Chưa lưu dữ liệu.':'Phân tích chưa đạt. Chưa lưu dữ liệu.');}
+ if(text){
+  const result=parseVoice(text);
+  el('preview').textContent=result.ok
+   ? '✅ HỢP LỆ ('+result.actions.length+' lệnh)\n'+result.actions.map((a,i)=>(i+1)+'. '+a).join('\n')+'\n\n🧪 CHỈ MÔ PHỎNG, CHƯA LƯU DỮ LIỆU.'
+   : '⚠️ KHÔNG HỢP LỆ\n'+result.message+'\n\nKhông xử lý lệnh nào. Bấm micro và nói lại.';
+  status(result.ok?'Đã kiểm tra xong. Bấm micro để thử phiên mới.':'Có lỗi trong phiên. Không xử lý lệnh nào.');
+ }
  else{el('preview').textContent='⚠️ Chưa có câu nhận diện cuối cùng. Vui lòng thử lại.';status('Chưa nhận được kết quả cuối cùng.');}
  buttons(false);
  if(recognition){try{recognition.abort();}catch(_){}}
@@ -102,7 +117,7 @@ el('start').onclick=()=>{
   recognition=new SR();recognition.lang='vi-VN';
   // Một lượt nói: tránh nối các vòng nhận diện liên tiếp thành văn bản lặp.
   recognition.continuous=false;recognition.interimResults=true;recognition.maxAlternatives=1;
-  recognition.onstart=()=>{if(mySession!==session||finished)return;buttons(true);status('🎙️ Đang nghe. Nói một câu chứa tối đa hai lệnh.');};
+  recognition.onstart=()=>{if(mySession!==session||finished)return;buttons(true);status('🎙️ Đang nghe. Nói tối đa hai lệnh HẾT hoặc LÊN.');};
   recognition.onspeechstart=()=>{if(mySession!==session||finished)return;lastActivity=Date.now();clearQuiet();status('Đang nghe câu nói...');};
   recognition.onresult=e=>{
    if(mySession!==session||finished)return;
