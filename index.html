@@ -1,4 +1,64 @@
 <!doctype html>
-<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kiểm tra giọng nói căn tin</title><style>body{font-family:system-ui,Arial,sans-serif;max-width:680px;margin:0 auto;padding:24px;background:#f7f7ff;color:#20203b}main{background:white;padding:24px;border-radius:18px;box-shadow:0 4px 22px #2221}button{font-size:19px;padding:14px 18px;border:0;border-radius:12px;background:#6941c6;color:white;margin:8px 8px 8px 0}button:disabled{opacity:.5}#stop{background:#b42318}pre{white-space:pre-wrap;word-break:break-word;background:#f2f4f7;padding:14px;border-radius:10px;min-height:70px}small{color:#555}</style></head><body><main><h1>🎙️ Kiểm tra giọng nói</h1><p>Thử đọc: “Thêm bò kho ba mươi phần”. Trang chỉ nhận diện, <strong>không lưu dữ liệu</strong>.</p><button id="start">Bắt đầu nghe</button><button id="stop" disabled>Dừng nghe</button><p id="status" role="status">Chưa bắt đầu.</p><h3>Nội dung nhận diện</h3><pre id="result">Chưa có</pre><h3>Thông tin kỹ thuật</h3><pre id="diagnostic"></pre><small>Chỉ hoạt động trên trình duyệt hỗ trợ Web Speech API. Trình duyệt có thể gửi âm thanh đến dịch vụ nhận diện của nhà cung cấp.</small></main><script>
-(()=>{'use strict';const $=id=>document.getElementById(id);const SR=window.SpeechRecognition||window.webkitSpeechRecognition;let rec=null,active=false;function state(s){$('status').textContent=s}function buttons(on){$('start').disabled=on;$('stop').disabled=!on}function diag(extra=''){$('diagnostic').textContent='HTTPS an toàn: '+window.isSecureContext+'\nTrong iframe: '+(window.self!==window.top)+'\nSpeechRecognition hỗ trợ: '+Boolean(SR)+'\n'+extra}diag();$('start').onclick=()=>{if(!SR){state('Trình duyệt này không hỗ trợ SpeechRecognition. Hãy thử Chrome.');return}try{rec=new SR();rec.lang='vi-VN';rec.continuous=true;rec.interimResults=true;rec.onstart=()=>{active=true;buttons(true);state('Đang nghe...')};rec.onresult=e=>{let final='',interim='';for(let i=0;i<e.results.length;i++){const t=e.results[i][0].transcript;if(e.results[i].isFinal)final+=t+' ';else interim+=t+' '} $('result').textContent=(final+interim).trim()||'Chưa có';state(interim?'Đang nhận diện...':'Đã nhận diện. Có thể nói tiếp.')};rec.onerror=e=>{state('Lỗi nhận diện: '+e.error);diag('Chi tiết: '+e.error+(e.message?' | '+e.message:''))};rec.onend=()=>{active=false;buttons(false);if(!$('status').textContent.startsWith('Lỗi'))state('Đã dừng nghe.')};rec.start()}catch(e){state('Không thể bắt đầu: '+e.message);buttons(false)}};$('stop').onclick=()=>{if(rec&&active)rec.stop()};})();
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Giọng nói căn tin - TEST 03</title>
+<style>
+*{box-sizing:border-box}body{font-family:system-ui,Arial,sans-serif;background:#f6f7fb;color:#1c2540;margin:0;padding:18px}main{max-width:720px;margin:auto;background:#fff;padding:22px;border-radius:18px;box-shadow:0 4px 20px #0001}h1{font-size:27px;color:#075f55}h2{font-size:19px;margin-top:24px}p{line-height:1.5}button{border:0;border-radius:12px;padding:15px 18px;font-size:18px;color:white;background:#6941c6;margin:5px 7px 5px 0}button.stop{background:#b42318}button:disabled{opacity:.45}.panel{background:#f2f4f8;border-radius:12px;padding:15px;min-height:58px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:17px}.muted{color:#64748b}.status{padding:13px;background:#eaf6f2;border-radius:10px;margin-top:12px}small{line-height:1.6;display:block;color:#5b6473;margin-top:22px}
+</style>
+</head>
+<body><main>
+<h1>🎙️ Giọng nói căn tin</h1>
+<p><strong>TEST 03:</strong> Nói thử “Thêm bò kho ba mươi phần”. Trang chỉ nhận diện giọng nói, <strong>không lưu hoặc sửa thực đơn</strong>.</p>
+<button id="start">🎙️ Bắt đầu nghe</button><button class="stop" id="stop" disabled>■ Dừng nghe</button>
+<div id="status" class="status" role="status">Sẵn sàng kiểm tra.</div>
+<h2>Đang nghe (tạm thời)</h2><div id="interim" class="panel muted">Chưa có</div>
+<h2>Câu đã nhận diện</h2><div id="final" class="panel">Chưa có</div>
+<h2>Kết quả sau 3 giây im lặng</h2><div id="preview" class="panel">Chưa có</div>
+<h2>Thông tin kỹ thuật</h2><div id="technical" class="panel"></div>
+<small>Không kết nối Google Sheets. Trình duyệt có thể gửi âm thanh tới dịch vụ nhận diện giọng nói của nhà cung cấp. Không đọc thông tin riêng tư khi thử nghiệm.</small>
+</main><script>
+(()=>{'use strict';
+const el=id=>document.getElementById(id);
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let recognition=null,session=0,stopping=false,quietTimer=null,latestText='',latestFinal='',lastResultAt=0;
+const setStatus=s=>el('status').textContent=s;
+const setButtons=listening=>{el('start').disabled=listening;el('stop').disabled=!listening;};
+const technical=detail=>{el('technical').textContent='HTTPS an toàn: '+isSecureContext+'\nTrong iframe: '+(self!==top)+'\nSpeechRecognition hỗ trợ: '+Boolean(SR)+(detail?'\n'+detail:'');};
+technical('');
+const clearQuiet=()=>{if(quietTimer){clearTimeout(quietTimer);quietTimer=null;}};
+function clean(t){return String(t||'').replace(/\s+/g,' ').trim();}
+// Xóa phần văn bản trùng ở ranh giới hai kết quả, không xóa từ lặp có chủ ý ở giữa câu.
+function mergeOverlap(a,b){a=clean(a);b=clean(b);if(!a)return b;if(!b)return a;if(a===b)return a;if(b.startsWith(a+' '))return b;if(a.endsWith(' '+b))return a;const x=a.toLocaleLowerCase('vi-VN').split(' '),y=b.toLocaleLowerCase('vi-VN').split(' ');for(let n=Math.min(x.length,y.length);n>0;n--){if(x.slice(-n).join(' ')===y.slice(0,n).join(' '))return a+' '+b.split(' ').slice(n).join(' ');}return a+' '+b;}
+function schedulePreview(){clearQuiet();const text=latestText;const stamp=lastResultAt;quietTimer=setTimeout(()=>{if(stamp!==lastResultAt)return;if(!text){el('preview').textContent='Chưa nhận được câu nói hoàn chỉnh.';return;}el('preview').textContent='🧪 Đã nhận: '+text+'\nChưa xử lý lệnh, chưa lưu dữ liệu.';setStatus('Đã im lặng 3 giây. Kết quả thử nghiệm đã sẵn sàng.');},3000);}
+el('start').onclick=()=>{
+ if(!SR){setStatus('Trình duyệt không hỗ trợ nhận diện giọng nói.');return;}
+ clearQuiet();session++;const mySession=session;stopping=false;latestText='';latestFinal='';lastResultAt=0;
+ el('interim').textContent='Chưa có';el('final').textContent='Chưa có';el('preview').textContent='Đang chờ...';
+ try{
+  recognition=new SR();recognition.lang='vi-VN';recognition.continuous=true;recognition.interimResults=true;recognition.maxAlternatives=1;
+  recognition.onstart=()=>{if(mySession!==session)return;setButtons(true);setStatus('🎙️ Đang nghe. Bà đọc câu lệnh nha.');};
+  recognition.onresult=e=>{
+   if(mySession!==session)return;
+   let finals='',interims='';
+   // Web Speech trả về danh sách kết quả tích lũy; xây lại từ đầu, không nối vào nội dung lần trước.
+   for(let i=0;i<e.results.length;i++){
+    const r=e.results[i],t=clean(r[0]&&r[0].transcript);
+    if(!t)continue;
+    if(r.isFinal)finals=mergeOverlap(finals,t);else interims=mergeOverlap(interims,t);
+   }
+   latestFinal=finals;latestText=mergeOverlap(finals,interims);
+   el('final').textContent=finals||'Chưa có kết quả cuối cùng';
+   el('interim').textContent=interims||'Không có nội dung tạm thời';
+   lastResultAt=Date.now();setStatus(interims?'Đang nhận diện...':'Đã nhận diện. Đang đợi 3 giây...');
+   schedulePreview();
+  };
+  recognition.onerror=e=>{if(mySession!==session)return;clearQuiet();setStatus('❌ Lỗi: '+e.error);technical('Lỗi nhận diện: '+e.error+(e.message?' | '+e.message:''));};
+  recognition.onend=()=>{if(mySession!==session)return;setButtons(false);if(!el('status').textContent.startsWith('❌')){setStatus(stopping?'Đã dừng nghe.':'Trình duyệt đã kết thúc phiên nghe.');if(latestText)schedulePreview();}};
+  recognition.start();
+ }catch(e){setButtons(false);setStatus('❌ Không thể bắt đầu: '+e.message);}
+};
+el('stop').onclick=()=>{stopping=true;if(recognition){try{recognition.stop();}catch(e){setStatus('Không thể dừng: '+e.message);}}};
+})();
 </script></body></html>
