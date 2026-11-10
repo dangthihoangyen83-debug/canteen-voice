@@ -1,0 +1,90 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1">
+  <title>TEST 12A - Bridge</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 520px;
+      margin: 50px auto;
+      padding: 20px;
+      text-align: center;
+    }
+    button {
+      background: #1769aa;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      padding: 16px 24px;
+      font-size: 17px;
+    }
+    #result {
+      margin-top: 24px;
+      padding: 20px;
+      background: #f1f5f9;
+      border-radius: 12px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+  <h2>🎙️ TEST 12A</h2>
+  <p>Kiểm tra GitHub Pages kết nối Apps Script Bridge</p>
+
+  <button onclick="testBridge()">
+    KIỂM TRA KẾT NỐI
+  </button>
+
+  <div id="result">Chưa kiểm tra</div>
+
+  <script>
+    const BRIDGE_URL =
+      'https://script.google.com/macros/s/AKfycbyHG8wFcZB1kZwqCjAHEsp8u4qARgMEjUCRuCzcILuQCdiFbYiFnAy4jNHD-d4FlgUY/exec';
+
+    function testBridge() {
+      const result = document.getElementById('result');
+      result.textContent = 'Đang kết nối...';
+
+      const callback =
+        'voiceTest11Cb_' + Date.now();
+
+      const script = document.createElement('script');
+      let finished = false;
+
+      const timer = setTimeout(function() {
+        finish('HẾT THỜI GIAN: Bridge không phản hồi.');
+      }, 15000);
+
+      function finish(message) {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        script.remove();
+        delete window[callback];
+        result.textContent = message;
+      }
+
+      window[callback] = function(data) {
+        finish(JSON.stringify(data, null, 2));
+      };
+
+      script.onerror = function() {
+        finish('LỖI: Không tải được JSONP từ Bridge.');
+      };
+
+      script.src =
+        BRIDGE_URL +
+        '?action=ping&callback=' +
+        encodeURIComponent(callback);
+
+      document.head.appendChild(script);
+    }
+  </script>
+</body>
+</html>
