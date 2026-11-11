@@ -14,7 +14,7 @@
 <button id="listen">🎙️ Bấm để nói</button>
 <div id="status" class="status" role="status">Sẵn sàng.</div>
 <h2>Câu đã nghe</h2><div id="heard" class="panel muted">Chưa có</div>
-<h2>Kết quả từ Apps Script</h2><div id="result" class="panel">Chưa kiểm tra</div>
+<button id="check" style="margin-top:12px;background:#087b83">🔎 Kiểm tra kết nối (không cần micro)</button><h2>Kết quả từ Apps Script</h2><div id="result" class="panel">Chưa kiểm tra</div>
 <small>Chỉ đọc dữ liệu. Chưa cập nhật HET_MON. Nếu trình duyệt yêu cầu quyền micro, hãy chọn Cho phép. Nên mở trực tiếp trang GitHub Pages trên Chrome.</small>
 </main>
 <script>
@@ -27,17 +27,17 @@ function status(t){$('status').textContent=t;}
 function setBusy(v){busy=v;$('listen').disabled=v;}
 function lookup(spoken){
  return new Promise((resolve,reject)=>{
-  const cb='canteenVoiceCb_'+Date.now()+'_'+Math.floor(Math.random()*1000000);
+  const cb='voiceTest';
   const script=document.createElement('script');let done=false;
   const finish=(err,data)=>{if(done)return;done=true;clearTimeout(timer);script.remove();try{delete window[cb];}catch(_){window[cb]=undefined;}err?reject(err):resolve(data);};
   window[cb]=data=>finish(null,data);
-  script.onerror=()=>finish(new Error('Không kết nối được Apps Script. Kiểm tra URL triển khai.'));
+  script.onerror=()=>finish(new Error('Trình duyệt không tải được phản hồi JSONP từ Apps Script. URL thử: '+script.src));
   const timer=setTimeout(()=>finish(new Error('Apps Script không phản hồi trong 20 giây.')),20000);
   const url=new URL(BRIDGE_URL);
   url.searchParams.set('page','voice_bridge_test');
   url.searchParams.set('spoken',spoken);
   url.searchParams.set('callback',cb);
-  url.searchParams.set('_',String(Date.now()));
+  // Khong them tham so phu khi doi chieu voi URL da kiem tra truc tiep.
   script.src=url.toString();document.head.appendChild(script);
  });
 }
@@ -58,6 +58,7 @@ function show(data){
   status('Chưa khớp món. Hãy kiểm tra câu đã nghe.');
  }
 }
+$('check').onclick=()=>{status('Đang kiểm tra đường truyền...');lookup('Hết thịt kho măng').then(show).catch(e=>{status('❌ '+e.message);$('result').textContent='Kiểm tra đường truyền thất bại. Không ghi dữ liệu.';});};
 $('listen').onclick=()=>{
  if(busy)return;
  if(!SR){status('❌ Trình duyệt này không hỗ trợ nhận diện giọng nói. Hãy dùng Chrome.');return;}
