@@ -1,119 +1,93 @@
 <!doctype html>
-<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Giọng nói căn tin · Chuyển lệnh sang Admin</title>
-<style>*{box-sizing:border-box}body{font-family:system-ui,Arial,sans-serif;background:#f6f7fb;color:#1c2540;margin:0;padding:18px}main{max-width:760px;margin:auto;background:white;padding:22px;border-radius:18px;box-shadow:0 4px 20px #0001}h1{font-size:26px;color:#075f55}h2{font-size:19px;margin-top:24px}p{line-height:1.5}button{border:0;border-radius:12px;padding:13px 16px;font-size:17px;color:white;background:#6941c6;margin:5px 7px 5px 0;cursor:pointer}button.stop{background:#b42318}button.secondary{background:#146c72}button:disabled{opacity:.45;cursor:default}.panel{background:#f2f4f8;border-radius:12px;padding:15px;min-height:55px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:16px}.muted{color:#64748b}.status{padding:13px;background:#eaf6f2;border-radius:10px;margin-top:12px}small{line-height:1.6;display:block;color:#5b6473;margin-top:22px}.choice{display:block;width:100%;text-align:left;background:#e8eefb;color:#1c2540;margin:7px 0}.ok{color:#076449}.warn{color:#a34705}</style></head>
-<body><main><h1>🎙️ Giọng nói căn tin · Chuyển lệnh sang Admin</h1><p>Nói tối đa <b>2 lệnh</b>, ví dụ “Hết bánh bao, lên cháo bò 30”. Cho phép tên rút gọn khi chỉ khớp một món. <b>Có bước xác nhận tại Admin. Trang này không ghi Google Sheets.</b></p>
-<button id="reload" class="secondary">↻ Tải thực đơn thật</button><button id="start" disabled>🎙️ Bắt đầu nghe</button><button id="stop" class="stop" disabled>■ Dừng nghe</button>
-<div id="status" class="status" role="status">Đang tải thực đơn...</div><h2>Đang nhận diện (tạm thời)</h2><div id="interim" class="panel muted">Chưa có</div><h2>Câu cuối cùng</h2><div id="final" class="panel">Chưa có</div><h2>Kết quả kiểm tra</h2><div id="preview" class="panel">Chưa có</div><div id="choices"></div><section id="confirmBox" hidden><h2>Tình trạng chuyển lệnh</h2><div id="confirmDetails" class="panel"></div><button id="confirm" class="secondary">↻ Gửi lại / Sao chép dự phòng</button><button id="cancel" class="stop">✕ Hủy lệnh</button></section><h2>Thực đơn từ Bridge</h2><div id="catalog" class="panel muted">Đang tải...</div><h2>Thông tin kỹ thuật</h2><div id="technical" class="panel"></div><small>Chỉ đọc dữ liệu thực đơn. Lệnh được gửi về cửa sổ Admin đã mở trang này. Nếu không có kết nối, dùng sao chép dự phòng. Trình duyệt có thể gửi âm thanh tới dịch vụ nhận dạng giọng nói của nhà cung cấp. Hãy mở trang GitHub Pages trực tiếp trên Chrome nếu micro bị chặn.</small></main>
-<script>(()=>{'use strict';
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Giọng nói căn tin | Kiểm thử chỉ đọc</title>
+<style>
+*{box-sizing:border-box}body{margin:0;padding:18px;background:#f5f7fb;font-family:system-ui,Arial,sans-serif;color:#17243c}main{max-width:650px;margin:auto;background:white;border-radius:20px;padding:24px;box-shadow:0 5px 25px #00000010}h1{font-size:25px;color:#07695b}p{line-height:1.6}.muted{color:#667085}.panel{white-space:pre-wrap;overflow-wrap:anywhere;background:#f1f5f9;border-radius:12px;padding:16px;min-height:65px;line-height:1.6}button{width:100%;border:0;border-radius:14px;background:#6b46c1;color:#fff;font-weight:700;font-size:19px;padding:17px;cursor:pointer}button:disabled{opacity:.5;cursor:not-allowed}.status{padding:14px;background:#e9f7f1;border-radius:12px;margin:15px 0}small{display:block;margin-top:20px;color:#667085;line-height:1.6}h2{font-size:17px;margin-top:22px}
+</style>
+</head>
+<body><main>
+<h1>🎙️ Giọng nói căn tin</h1>
+<p>Nói <b>“Hết thịt kho măng”</b> hoặc tên một món đang bán. Trang sẽ tự kiểm tra với Apps Script. <b>Chế độ thử nghiệm: không thay đổi thực đơn.</b></p>
+<button id="listen">🎙️ Bấm để nói</button>
+<div id="status" class="status" role="status">Sẵn sàng.</div>
+<h2>Câu đã nghe</h2><div id="heard" class="panel muted">Chưa có</div>
+<h2>Kết quả từ Apps Script</h2><div id="result" class="panel">Chưa kiểm tra</div>
+<small>Chỉ đọc dữ liệu. Chưa cập nhật HET_MON. Nếu trình duyệt yêu cầu quyền micro, hãy chọn Cho phép. Nên mở trực tiếp trang GitHub Pages trên Chrome.</small>
+</main>
+<script>
+(()=>{'use strict';
 const BRIDGE_URL='https://script.google.com/macros/s/AKfycbw5QkJ2So3iypjFntVOJIFE-i-xSTKdpu1N0EJp6Yv9ISXlQgttPrC5TFJ70JfM4VjN/exec';
-const el=id=>document.getElementById(id), SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-const clean=t=>String(t==null?'':t).replace(/\s+/g,' ').trim();
-const norm=t=>clean(t).toLocaleLowerCase('vi-VN').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
-let selling=[],available=[],loaded=false,recognition=null,session=0,quietTimer=null,finalText='',lastActivity=0,finished=false;
-let pending=null, snapshotDate="", snapshotLoadedAt=0;
-const status=t=>el('status').textContent=t;
-const buttons=active=>{el('start').disabled=active||!loaded;el('stop').disabled=!active;el('reload').disabled=active;};
-function resetConfirm(){pending=null;el('confirmBox').hidden=true;el('confirmDetails').textContent='';}
-function technical(extra=''){el('technical').textContent='HTTPS: '+isSecureContext+'\nTrong iframe: '+(self!==top)+'\nHỗ trợ SpeechRecognition: '+Boolean(SR)+'\nĐã tải dữ liệu: '+loaded+(extra?'\n'+extra:'');}
-function jsonp(action){return new Promise((resolve,reject)=>{
- const cb='voiceTest11Cb_'+Date.now()+'_'+Math.floor(Math.random()*1000000);let script=document.createElement('script'),timer,done=false;
- const finish=(err,data)=>{if(done)return;done=true;clearTimeout(timer);script.remove();delete window[cb];err?reject(err):resolve(data);};
- window[cb]=data=>finish(null,data);script.onerror=()=>finish(Error('Không tải được Bridge. Kiểm tra URL và quyền triển khai.'));
- timer=setTimeout(()=>finish(Error('Bridge quá thời gian phản hồi (15 giây).')),15000);
- script.src=BRIDGE_URL+'?action='+encodeURIComponent(action)+'&callback='+encodeURIComponent(cb)+'&t='+Date.now();document.head.appendChild(script);
- });}
-function pick(o,keys){for(const k of keys)if(o[k]!=null&&String(o[k]).trim()!=='')return o[k];return '';}
-function normalizeItem(x){
- if(!x||typeof x!=='object')return null;
- const name=clean(pick(x,['tenMon','TEN_MON','ten_mon','name','TEN_THUC_AN','tenThucAn','TEN_MON_AN']));
- const code=clean(pick(x,['maMon','MA_MON','ma_mon','code']));
- const batch=clean(pick(x,['maDotBan','MA_DOT_BAN','ma_dot_ban']));
- return name&&code?{name,code,batch}:null;
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+const $=id=>document.getElementById(id);
+let recognition=null,busy=false,sequence=0;
+function status(t){$('status').textContent=t;}
+function setBusy(v){busy=v;$('listen').disabled=v;}
+function lookup(spoken){
+ return new Promise((resolve,reject)=>{
+  const cb='canteenVoiceCb_'+Date.now()+'_'+Math.floor(Math.random()*1000000);
+  const script=document.createElement('script');let done=false;
+  const finish=(err,data)=>{if(done)return;done=true;clearTimeout(timer);script.remove();try{delete window[cb];}catch(_){window[cb]=undefined;}err?reject(err):resolve(data);};
+  window[cb]=data=>finish(null,data);
+  script.onerror=()=>finish(new Error('Không kết nối được Apps Script. Kiểm tra URL triển khai.'));
+  const timer=setTimeout(()=>finish(new Error('Apps Script không phản hồi trong 20 giây.')),20000);
+  const url=new URL(BRIDGE_URL);
+  url.searchParams.set('page','voice_bridge_test');
+  url.searchParams.set('spoken',spoken);
+  url.searchParams.set('callback',cb);
+  url.searchParams.set('_',String(Date.now()));
+  script.src=url.toString();document.head.appendChild(script);
+ });
 }
-async function load(){session++;clearQuiet();finished=true;if(recognition)try{recognition.abort();}catch(_){}loaded=false;buttons(false);resetConfirm();el('choices').replaceChildren();status('Đang đọc thực đơn thật từ Bridge...');
- try{const data=await jsonp('snapshot');if(!data||!data.ok)throw Error(data&&data.message||'Bridge không trả về dữ liệu hợp lệ.');
- const rawSelling=data.dangBan,rawAvailable=data.coTheLen;
- if(!Array.isArray(rawSelling)||!Array.isArray(rawAvailable))throw Error('Snapshot thiếu mảng dangBan / coTheLen.');
- selling=rawSelling.map(normalizeItem);available=rawAvailable.map(normalizeItem);
- if(selling.some(x=>!x)||available.some(x=>!x))throw Error('Snapshot thiếu tên hoặc mã món. Cần kiểm tra cấu trúc một dòng dữ liệu, chưa bật micro.');
- if(selling.some(x=>!x.batch))throw Error('Món đang bán thiếu MA_DOT_BAN. Không bật micro để tránh chọn sai đợt.');
- if(selling.length!==Number(data.soDotDangBanHopLe)||available.length!==Number(data.soMonCoTheLenHopLe))throw Error('Số dòng danh sách không khớp số lượng Bridge công bố.');
- const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Ho_Chi_Minh',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
- if(!/^\d{4}-\d{2}-\d{2}$/.test(String(data.ngay||''))||data.ngay!==today)throw Error('Ngày snapshot '+(data.ngay||'không rõ')+' khác ngày hiện tại '+today+'.');
- snapshotDate=data.ngay;snapshotLoadedAt=Date.now();loaded=true;buttons(false);status('✅ Đã tải thực đơn ngày '+data.ngay+'. Sẵn sàng nghe.');
- el('catalog').textContent='Đang bán: '+selling.length+' đợt\n'+selling.map(x=>'• '+x.name+' | '+x.code+' | '+x.batch).join('\n')+'\n\nCó thể lên: '+available.length+' món\n'+available.slice(0,12).map(x=>'• '+x.name+' | '+x.code).join('\n')+(available.length>12?'\n…':'');technical('Bridge: '+(data.test||'snapshot'));
- }catch(e){selling=[];available=[];el('catalog').textContent='Không tải được danh mục.';status('❌ '+e.message);technical(e.message);}}
-const small={khong:0,mot:1,hai:2,ba:3,bon:4,tu:4,nam:5,lam:5,sau:6,bay:7,tam:8,chin:9,muoi:10};
-function quantity(t){t=norm(t).replace(/\b(phan|suat)\b/g,'').trim();if(/^\d+$/.test(t))return Number(t);if(!t)return NaN;
- const w=t.split(' ');let n=0,i=0;
- if(w[0]==='muoi'){n=10;i=1;if(i<w.length&&small[w[i]]!==undefined){n+=small[w[i]];i++;}}
- else if(w.length>=2&&small[w[0]]>=2&&w[1]==='muoi'){n=small[w[0]]*10;i=2;if(i<w.length&&small[w[i]]!==undefined){n+=small[w[i]];i++;}}
- else if(w.length===1&&small[w[0]]!==undefined){n=small[w[0]];i=1;}
- return i===w.length?n:NaN;}
-function wordsMatch(query,name){const q=norm(query).split(' ').filter(Boolean),n=norm(name).split(' ').filter(Boolean);if(!q.length)return false;
- // Tên gọi rút gọn phải là chuỗi từ theo đúng thứ tự, không nhận khớp mơ hồ theo khoảng cách ký tự.
- let j=0;for(const word of n)if(word===q[j])j++;return j===q.length;}
-function splitQuantity(phrase){const words=clean(phrase).split(' ');const possibilities=[];
- // Tách số lượng từ cuối câu, ưu tiên phần số dài nhất được nhận diện hợp lệ.
- for(let k=1;k<=Math.min(4,words.length-1);k++){const q=quantity(words.slice(-k).join(' '));if(Number.isSafeInteger(q)&&q>0)possibilities.push({name:words.slice(0,-k).join(' '),count:q,k});}
- return possibilities.sort((a,b)=>b.k-a.k)[0]||null;}
-function parseVoice(raw){if(!loaded)return{ok:false,message:'Chưa tải thực đơn thật.'};const sentence=norm(raw);if(!sentence)return{ok:false,message:'Chưa có câu nhận diện cuối cùng.'};
- const matches=[...sentence.matchAll(/(?:^|\s)(het|len|them)(?=\s|$)/g)];if(!matches.length)return{ok:false,message:'Không nhận ra lệnh HẾT hoặc LÊN.'};
- if(sentence.slice(0,matches[0].index).trim())return{ok:false,message:'Có từ nằm trước lệnh. Vui lòng nói lại.'};
- if(matches.length>2)return{ok:false,message:'Mỗi lượt tối đa 2 lệnh.'};const actions=[];
- for(let i=0;i<matches.length;i++){
- const m=matches[i],start=m.index+m[0].length,end=i+1<matches.length?matches[i+1].index:sentence.length;
- const phrase=sentence.slice(start,end).trim();if(!phrase)return{ok:false,message:'Thiếu tên món.'};
- const kind=m[1]==='het'?'HẾT':'LÊN';let namePhrase=phrase,count=null;
- if(kind==='LÊN'){const q=splitQuantity(phrase);if(!q)return{ok:false,message:'Lệnh LÊN phải có số lượng nguyên dương ở cuối. Ví dụ: “Lên cháo thịt bò 30”.'};namePhrase=q.name;count=q.count;}
- const pool=kind==='HẾT'?selling:available;
- const matchesItems=pool.filter(x=>wordsMatch(namePhrase,x.name));
- if(!matchesItems.length)return{ok:false,message:'Không tìm thấy món phù hợp trong danh sách '+(kind==='HẾT'?'đang bán':'có thể lên')+': “'+namePhrase+'”.'};
- if(matchesItems.length>1){return{ok:false,ambiguous:true,message:'Tên “'+namePhrase+'” khớp '+matchesItems.length+' món/đợt. Hãy chọn để xem lại, không thực hiện tự động.',options:matchesItems,kind,count};}
- const item=matchesItems[0];actions.push({kind,item,count});
+function show(data){
+ if(!data||typeof data!=='object'){throw new Error('Phản hồi không hợp lệ.');}
+ if(data.ok&&data.code==='MATCHED_NO_WRITE'&&data.mode==='READ_ONLY'&&data.dish){
+  const d=data.dish;
+  $('result').textContent='✅ ĐÃ TÌM ĐÚNG MÓN\n'
+   +'Tên món: '+(d.tenMon||'')+'\n'
+   +'Mã món: '+(d.maMon||'')+'\n'
+   +'Mã đợt bán: '+(d.maDotBan||'')+'\n'
+   +'Trạng thái hiện tại: '+(d.hetMon?'Đã hết':'Đang bán')+'\n'
+   +'Lệnh: '+(data.kind||'')+'\n\n'
+   +'🔒 CHỈ ĐỌC. CHƯA THAY ĐỔI GOOGLE SHEETS.';
+  status('✅ Apps Script nhận và tìm đúng món.');
+ }else{
+  $('result').textContent='⚠️ Không xác nhận được món\nMã: '+(data.code||'Không rõ')+'\n'+(data.message||data.note||'Không có thông tin chi tiết.')+'\n\nKhông thay đổi dữ liệu.';
+  status('Chưa khớp món. Hãy kiểm tra câu đã nghe.');
  }
- if(actions.length===2&&actions[0].item.code===actions[1].item.code)return{ok:false,message:'Hai lệnh cùng một mã món. Hãy thực hiện riêng.'};
- return{ok:true,actions};}
-function formatAction(a){return a.kind+' · '+a.item.name+' | '+a.item.code+(a.kind==='HẾT'?' | '+a.item.batch:' | '+a.count+' phần');}
-function showResult(){if(finished)return;finished=true;clearQuiet();buttons(false);resetConfirm();el('choices').replaceChildren();
- const result=parseVoice(finalText);if(result.ok){el('preview').textContent='✅ NHẬN DIỆN HỢP LỆ ('+result.actions.length+' lệnh)\n'+result.actions.map((a,i)=>(i+1)+'. '+formatAction(a)).join('\n')+'\n\nCHƯA GHI SHEETS. CHỜ CHUYỂN SANG ADMIN.';pending=result.actions.map(a=>({kind:a.kind,item:{...a.item},count:a.count}));el('confirmDetails').textContent=pending.map((a,i)=>(i+1)+'. '+formatAction(a)).join('\n')+'\n\nTự chuyển về Admin. Nhân viên chỉ cần xác nhận một lần ở Admin.';el('confirmBox').hidden=false;status('Đã nhận diện. Đang tự chuyển về Admin...');if(window.opener&&!window.opener.closed){el('confirm').click();}else{status('Không có cửa sổ Admin kết nối. Dùng nút sao chép dự phòng.');}}
- else{el('preview').textContent='⚠️ CHƯA HỢP LỆ\n'+result.message+'\n\nKhông thực hiện lệnh nào.';status('Không xử lý lệnh nào.');
- if(result.ambiguous){const heading=document.createElement('p');heading.textContent='Các lựa chọn để đối chiếu (chỉ xem, chưa thực hiện):';el('choices').appendChild(heading);
- for(const item of result.options){const b=document.createElement('button');b.className='choice';b.textContent=item.name+' | '+item.code+(item.batch?' | '+item.batch:'');b.onclick=()=>{el('preview').textContent='🔎 ĐÃ CHỌN ĐỂ ĐỐI CHIẾU\n'+result.kind+' · '+item.name+' | '+item.code+(item.batch?' | '+item.batch:'')+(result.count?' | '+result.count+' phần':'')+'\n\n🧪 Chưa thực hiện lệnh nào. Hãy nói lại tên rõ hơn.';};el('choices').appendChild(b);}}}
- if(recognition)try{recognition.abort();}catch(_){}
 }
-function clearQuiet(){if(quietTimer!==null){clearTimeout(quietTimer);quietTimer=null;}}
-function scheduleQuiet(){clearQuiet();const stamp=lastActivity;quietTimer=setTimeout(()=>{if(stamp!==lastActivity||finished)return;showResult();},3000);}
-el('confirm').onclick=async()=>{if(!pending)return;
- const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Ho_Chi_Minh',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
- if(snapshotDate!==today||Date.now()-snapshotLoadedAt>120000){resetConfirm();status('⚠️ Dữ liệu quá 2 phút hoặc đã sang ngày mới. Tải lại thực đơn và nói lại.');return;}
- const request={version:1,requestId:'VL_'+Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join(''),ngay:snapshotDate,actions:pending.map(a=>a.kind==='HẾT'?{kind:'HET',maMon:a.item.code,maDotBan:a.item.batch}:{kind:'LEN',maMon:a.item.code,soLuong:a.count})};
- const payload=JSON.stringify(request);
- if(window.opener && !window.opener.closed){
-   try{
-     window.opener.postMessage({type:'CANTEEN_VOICE_TRANSFER_V1',request},'*');
-     resetConfirm();
-     el('preview').textContent='📨 ĐÃ GỬI LỆNH VỀ ADMIN\n'+request.actions.map((a,i)=>(i+1)+'. '+a.kind+' · '+a.maMon).join('\n')+'\n\nQuay lại Admin để kiểm tra và xác nhận ghi thật. Chưa ghi Sheets.';
-     status('Đã chuyển lệnh. Quay lại Admin xác nhận.');
-     return;
-   }catch(_){/* fallback below */}
+$('listen').onclick=()=>{
+ if(busy)return;
+ if(!SR){status('❌ Trình duyệt này không hỗ trợ nhận diện giọng nói. Hãy dùng Chrome.');return;}
+ const mine=++sequence;let finalText='',sent=false;
+ const rec=new SR();recognition=rec;
+ rec.lang='vi-VN';rec.continuous=false;rec.interimResults=true;rec.maxAlternatives=1;
+ setBusy(true);$('heard').textContent='Đang nghe...';$('result').textContent='Chờ nhận diện...';
+ function send(){
+  if(sent||mine!==sequence)return;sent=true;
+  const spoken=finalText.trim().replace(/\s+/g,' ');
+  if(!spoken){status('⚠️ Chưa nghe được câu nói. Bấm micro để thử lại.');setBusy(false);return;}
+  $('heard').textContent=spoken;status('Đang gửi câu lệnh đến Apps Script...');
+  lookup(spoken).then(show).catch(e=>{status('❌ '+e.message);$('result').textContent='Không ghi dữ liệu. Có thể thử lại.';}).finally(()=>{if(mine===sequence)setBusy(false);});
  }
- try{await navigator.clipboard.writeText(payload);resetConfirm();el('preview').textContent='✅ ĐÃ SAO CHÉP PHIẾU LỆNH\n'+request.actions.map((a,i)=>(i+1)+'. '+a.kind+' · '+a.maMon+(a.kind==='HET'?' | '+a.maDotBan:' | '+a.soLuong+' phần')).join('\n')+'\n\nQuay lại Admin, dán vào ô NHẬN PHIẾU LỆNH, kiểm tra và xác nhận.\nCHƯA GHI GOOGLE SHEETS.';status('Đã sao chép. Quay lại Admin để xác nhận ghi thật.');}
- catch(e){el('preview').textContent='Không sao chép tự động được. Chọn và sao chép toàn bộ nội dung bên dưới:\n'+payload;status('⚠️ Trình duyệt chặn clipboard, hãy sao chép nội dung trong Kết quả kiểm tra.');}
+ rec.onstart=()=>{if(mine===sequence)status('🎙️ Đang nghe. Nói một câu lệnh...');};
+ rec.onresult=e=>{
+  if(mine!==sequence)return;
+  let finals=[],interims=[];
+  for(let i=0;i<e.results.length;i++){
+   const r=e.results[i],t=(r[0]&&r[0].transcript||'').trim();
+   if(t)(r.isFinal?finals:interims).push(t);
+  }
+  if(finals.length)finalText=finals.join(' ');
+  $('heard').textContent=[finalText,interims.join(' ')].filter(Boolean).join(' ')||'Đang nghe...';
+  if(finalText){try{rec.stop();}catch(_){} }
+ };
+ rec.onerror=e=>{if(mine!==sequence||sent)return;sent=true;status('❌ Lỗi micro: '+e.error);$('result').textContent='Không thay đổi dữ liệu.';setBusy(false);};
+ rec.onend=()=>{if(mine===sequence&&!sent)send();};
+ try{rec.start();}catch(e){status('❌ Không mở được micro: '+e.message);setBusy(false);}
 };
-el('cancel').onclick=()=>{resetConfirm();el('preview').textContent='✕ ĐÃ HỦY TOÀN BỘ LỆNH. Không thay đổi dữ liệu.';status('Đã hủy toàn bộ lệnh.');};
-el('reload').onclick=load;
-el('start').onclick=()=>{if(!loaded)return;resetConfirm();if(!SR){status('Trình duyệt không hỗ trợ nhận diện giọng nói.');return;}
- session++;const mine=session;clearQuiet();finished=false;finalText='';lastActivity=Date.now();el('choices').replaceChildren();el('interim').textContent='Chưa có';el('final').textContent='Chưa có';el('preview').textContent='Đang chờ câu nói...';
- try{recognition=new SR();recognition.lang='vi-VN';recognition.continuous=false;recognition.interimResults=true;recognition.maxAlternatives=1;
- recognition.onstart=()=>{if(mine!==session||finished)return;buttons(true);status('🎙️ Đang nghe, tối đa hai lệnh.');};
- recognition.onspeechstart=()=>{if(mine!==session||finished)return;lastActivity=Date.now();clearQuiet();status('Đang nghe câu nói...');};
- recognition.onresult=e=>{if(mine!==session||finished)return;const f=[],temp=[];for(let i=0;i<e.results.length;i++){const r=e.results[i],t=clean(r[0]&&r[0].transcript);if(t)(r.isFinal?f:temp).push(t);}
- finalText=clean(f.join(' '));el('final').textContent=finalText||'Chưa có kết quả cuối cùng';el('interim').textContent=clean(temp.join(' '))||'Không có nội dung tạm thời';lastActivity=Date.now();status(finalText?'Đã có kết quả, chờ 3 giây để chốt...':'Đang nhận diện...');scheduleQuiet();};
- recognition.onerror=e=>{if(mine!==session||finished)return;clearQuiet();finished=true;buttons(false);status('❌ Lỗi nhận diện: '+e.error);technical('Lỗi: '+e.error);};
- recognition.onend=()=>{if(mine!==session||finished)return;buttons(false);if(!quietTimer){lastActivity=Date.now();scheduleQuiet();}status(finalText?'Đã nghe xong, chờ chốt kết quả...':'Đã kết thúc nghe, đang chờ kết quả...');};
- recognition.start();buttons(true);
- }catch(e){buttons(false);finished=true;status('❌ Không thể bắt đầu: '+e.message);}};
-el('stop').onclick=()=>{if(finished)return;if(recognition)try{recognition.stop();}catch(_){}if(finalText){lastActivity=Date.now();scheduleQuiet();status('Đã dừng nghe. Chờ 3 giây để chốt.');}else status('Đã dừng nghe. Đang chờ kết quả cuối cùng...');};
-technical();load();
-})();</script></body></html>
+})();
+</script>
+</body></html>
