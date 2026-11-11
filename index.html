@@ -1,94 +1,49 @@
 <!doctype html>
-<html lang="vi">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Giọng nói căn tin | Kiểm thử chỉ đọc</title>
-<style>
-*{box-sizing:border-box}body{margin:0;padding:18px;background:#f5f7fb;font-family:system-ui,Arial,sans-serif;color:#17243c}main{max-width:650px;margin:auto;background:white;border-radius:20px;padding:24px;box-shadow:0 5px 25px #00000010}h1{font-size:25px;color:#07695b}p{line-height:1.6}.muted{color:#667085}.panel{white-space:pre-wrap;overflow-wrap:anywhere;background:#f1f5f9;border-radius:12px;padding:16px;min-height:65px;line-height:1.6}button{width:100%;border:0;border-radius:14px;background:#6b46c1;color:#fff;font-weight:700;font-size:19px;padding:17px;cursor:pointer}button:disabled{opacity:.5;cursor:not-allowed}.status{padding:14px;background:#e9f7f1;border-radius:12px;margin:15px 0}small{display:block;margin-top:20px;color:#667085;line-height:1.6}h2{font-size:17px;margin-top:22px}
-</style>
-</head>
-<body><main>
-<h1>🎙️ Giọng nói căn tin</h1>
-<p>Nói <b>“Hết thịt kho măng”</b> hoặc tên một món đang bán. Trang sẽ tự kiểm tra với Apps Script. <b>Chế độ thử nghiệm: không thay đổi thực đơn.</b></p>
-<button id="listen">🎙️ Bấm để nói</button>
-<div id="status" class="status" role="status">Sẵn sàng.</div>
-<h2>Câu đã nghe</h2><div id="heard" class="panel muted">Chưa có</div>
-<button id="check" style="margin-top:12px;background:#087b83">🔎 Kiểm tra kết nối (không cần micro)</button><h2>Kết quả từ Apps Script</h2><div id="result" class="panel">Chưa kiểm tra</div>
-<small>Chỉ đọc dữ liệu. Chưa cập nhật HET_MON. Nếu trình duyệt yêu cầu quyền micro, hãy chọn Cho phép. Nên mở trực tiếp trang GitHub Pages trên Chrome.</small>
-</main>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Giọng nói căn tin | Voice Gate thử nghiệm</title>
+<style>*{box-sizing:border-box}body{margin:0;background:#f5f7fb;color:#173044;font:17px system-ui,Arial,sans-serif;padding:18px}main{max-width:680px;margin:auto;background:white;border-radius:20px;padding:24px;box-shadow:0 4px 22px #0001}h1{font-size:27px;color:#006a60}button{width:100%;padding:18px;border:0;border-radius:14px;color:white;background:#6e42c4;font-size:21px;cursor:pointer;margin:12px 0}button.secondary{background:#087e85}button:disabled{opacity:.5}.panel{background:#eef4f8;padding:16px;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0}#gate{width:1px;height:1px;position:absolute;left:-9999px;border:0}small{color:#586b79}</style></head>
+<body><main><h1>🎙️ Giọng nói căn tin</h1><p>Thử nói <b>“Hết thịt kho măng”</b>. Đây là bản <b>CHỈ ĐỌC</b>, chưa thay đổi thực đơn.</p>
+<button id="mic" disabled>🎙️ Bấm để nói</button><button class="secondary" id="test" disabled>🔎 Kiểm tra kết nối (không cần micro)</button>
+<div id="status" class="panel">Đang kết nối trang trung gian Apps Script...</div><h3>Câu đã nghe</h3><div id="heard" class="panel">Chưa có</div><h3>Kết quả</h3><div id="result" class="panel">Chưa có</div><small>Không dùng JSONP. Trang trung gian gọi google.script.run; chưa ghi Sheets.</small>
+<iframe id="gate" title="Voice Gate read-only" referrerpolicy="no-referrer"></iframe></main>
 <script>
-(()=>{'use strict';
-const BRIDGE_URL='https://script.google.com/macros/s/AKfycbw5QkJ2So3iypjFntVOJIFE-i-xSTKdpu1N0EJp6Yv9ISXlQgttPrC5TFJ70JfM4VjN/exec';
-const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-const $=id=>document.getElementById(id);
-let recognition=null,busy=false,sequence=0;
-function status(t){$('status').textContent=t;}
-function setBusy(v){busy=v;$('listen').disabled=v;}
+(function(){'use strict';
+// DÁN URL /exec MỚI NHẤT CỦA CÙNG DỰ ÁN APPS SCRIPT VÀO DÒNG NÀY:
+var WEB_APP_URL='PASTE_NEW_DEPLOYMENT_EXEC_URL_HERE';
+var CHANNEL='CANTEEN_VOICE_GATE_V1',GITHUB_ORIGIN=location.origin;
+var gate=document.getElementById('gate'),mic=document.getElementById('mic'),test=document.getElementById('test'),status=document.getElementById('status'),heard=document.getElementById('heard'),result=document.getElementById('result');
+var ready=false,pending=null,timer=null,SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+function setStatus(s){status.textContent=s;}
+function makeId(){var a=new Uint8Array(12);crypto.getRandomValues(a);return 'vg_'+Array.from(a,x=>x.toString(16).padStart(2,'0')).join('');}
 function lookup(spoken){
- return new Promise((resolve,reject)=>{
-  const cb='voiceTest';
-  const script=document.createElement('script');let done=false;
-  const finish=(err,data)=>{if(done)return;done=true;clearTimeout(timer);script.remove();try{delete window[cb];}catch(_){window[cb]=undefined;}err?reject(err):resolve(data);};
-  window[cb]=data=>finish(null,data);
-  script.onerror=()=>finish(new Error('Trình duyệt không tải được phản hồi JSONP từ Apps Script. URL thử: '+script.src));
-  const timer=setTimeout(()=>finish(new Error('Apps Script không phản hồi trong 20 giây.')),20000);
-  const url=new URL(BRIDGE_URL);
-  url.searchParams.set('page','voice_bridge_test');
-  url.searchParams.set('spoken',spoken);
-  url.searchParams.set('callback',cb);
-  // Khong them tham so phu khi doi chieu voi URL da kiem tra truc tiep.
-  script.src=url.toString();document.head.appendChild(script);
- });
+ if(!ready){setStatus('Trang trung gian chưa sẵn sàng.');return;}
+ if(pending){setStatus('Đang chờ phản hồi của lệnh trước.');return;}
+ var id=makeId();pending=id;result.textContent='Đang tra cứu: '+spoken;
+ timer=setTimeout(function(){if(pending===id){pending=null;result.textContent='Quá 20 giây không nhận phản hồi từ Apps Script.';}},20000);
+ // targetOrigin là origin của iframe Apps Script; Google có thể dùng iframe lồng và khác origin.
+ // Thử nghiệm READ_ONLY: gửi đến cửa sổ iframe cụ thể; phía gate vẫn kiểm tra origin GitHub.
+ gate.contentWindow.postMessage({channel:CHANNEL,type:'LOOKUP',requestId:id,spoken:spoken},'*');
 }
-function show(data){
- if(!data||typeof data!=='object'){throw new Error('Phản hồi không hợp lệ.');}
- if(data.ok&&data.code==='MATCHED_NO_WRITE'&&data.mode==='READ_ONLY'&&data.dish){
-  const d=data.dish;
-  $('result').textContent='✅ ĐÃ TÌM ĐÚNG MÓN\n'
-   +'Tên món: '+(d.tenMon||'')+'\n'
-   +'Mã món: '+(d.maMon||'')+'\n'
-   +'Mã đợt bán: '+(d.maDotBan||'')+'\n'
-   +'Trạng thái hiện tại: '+(d.hetMon?'Đã hết':'Đang bán')+'\n'
-   +'Lệnh: '+(data.kind||'')+'\n\n'
-   +'🔒 CHỈ ĐỌC. CHƯA THAY ĐỔI GOOGLE SHEETS.';
-  status('✅ Apps Script nhận và tìm đúng món.');
- }else{
-  $('result').textContent='⚠️ Không xác nhận được món\nMã: '+(data.code||'Không rõ')+'\n'+(data.message||data.note||'Không có thông tin chi tiết.')+'\n\nKhông thay đổi dữ liệu.';
-  status('Chưa khớp món. Hãy kiểm tra câu đã nghe.');
+window.addEventListener('message',function(ev){
+ if(ev.source!==gate.contentWindow)return;
+ var d=ev.data;if(!d||d.channel!==CHANNEL)return;
+ // Google có thể dùng script.google.com hoặc script.googleusercontent.com cho HTML Service.
+ if(!/^https:\/\/(?:script\.google\.com|[a-z0-9-]+\.googleusercontent\.com)$/.test(ev.origin))return;
+ if(d.type==='READY'){ready=true;mic.disabled=!SR;test.disabled=false;setStatus('✅ Trang trung gian đã kết nối. Có thể kiểm tra.');return;}
+ if(d.type==='RESULT'&&pending&&d.requestId===pending){clearTimeout(timer);pending=null;
+  var x=d.payload||{};result.textContent=JSON.stringify(x,null,2);
+  setStatus(x.ok?'✅ Apps Script đã tìm được món. Chưa ghi dữ liệu.':'⚠️ Apps Script đã phản hồi: '+(x.code||'UNKNOWN'));
  }
-}
-$('check').onclick=()=>{status('Đang kiểm tra đường truyền...');lookup('Hết thịt kho măng').then(show).catch(e=>{status('❌ '+e.message);$('result').textContent='Kiểm tra đường truyền thất bại. Không ghi dữ liệu.';});};
-$('listen').onclick=()=>{
- if(busy)return;
- if(!SR){status('❌ Trình duyệt này không hỗ trợ nhận diện giọng nói. Hãy dùng Chrome.');return;}
- const mine=++sequence;let finalText='',sent=false;
- const rec=new SR();recognition=rec;
- rec.lang='vi-VN';rec.continuous=false;rec.interimResults=true;rec.maxAlternatives=1;
- setBusy(true);$('heard').textContent='Đang nghe...';$('result').textContent='Chờ nhận diện...';
- function send(){
-  if(sent||mine!==sequence)return;sent=true;
-  const spoken=finalText.trim().replace(/\s+/g,' ');
-  if(!spoken){status('⚠️ Chưa nghe được câu nói. Bấm micro để thử lại.');setBusy(false);return;}
-  $('heard').textContent=spoken;status('Đang gửi câu lệnh đến Apps Script...');
-  lookup(spoken).then(show).catch(e=>{status('❌ '+e.message);$('result').textContent='Không ghi dữ liệu. Có thể thử lại.';}).finally(()=>{if(mine===sequence)setBusy(false);});
- }
- rec.onstart=()=>{if(mine===sequence)status('🎙️ Đang nghe. Nói một câu lệnh...');};
- rec.onresult=e=>{
-  if(mine!==sequence)return;
-  let finals=[],interims=[];
-  for(let i=0;i<e.results.length;i++){
-   const r=e.results[i],t=(r[0]&&r[0].transcript||'').trim();
-   if(t)(r.isFinal?finals:interims).push(t);
-  }
-  if(finals.length)finalText=finals.join(' ');
-  $('heard').textContent=[finalText,interims.join(' ')].filter(Boolean).join(' ')||'Đang nghe...';
-  if(finalText){try{rec.stop();}catch(_){} }
- };
- rec.onerror=e=>{if(mine!==sequence||sent)return;sent=true;status('❌ Lỗi micro: '+e.error);$('result').textContent='Không thay đổi dữ liệu.';setBusy(false);};
- rec.onend=()=>{if(mine===sequence&&!sent)send();};
- try{rec.start();}catch(e){status('❌ Không mở được micro: '+e.message);setBusy(false);}
+});
+test.onclick=function(){heard.textContent='Thử nghiệm không cần micro: Hết thịt kho măng';lookup('Hết thịt kho măng');};
+mic.onclick=function(){if(!SR){setStatus('Trình duyệt không hỗ trợ SpeechRecognition.');return;}
+ var r=new SR();r.lang='vi-VN';r.interimResults=false;r.continuous=false;mic.disabled=true;setStatus('🎙️ Đang nghe...');
+ r.onresult=function(e){var spoken=String(e.results[0][0].transcript||'').trim();heard.textContent=spoken;lookup(spoken);};
+ r.onerror=function(e){setStatus('Lỗi micro: '+e.error);};r.onend=function(){mic.disabled=!ready;};
+ try{r.start();}catch(e){mic.disabled=!ready;setStatus('Không mở được micro: '+e.message);}
 };
+if(WEB_APP_URL.indexOf('PASTE_')===0){setStatus('⚠️ Chưa điền URL /exec triển khai mới vào WEB_APP_URL.');return;}
+var u=WEB_APP_URL+(WEB_APP_URL.includes('?')?'&':'?')+'page=voice_gate&v='+Date.now();
+gate.src=u;
+setTimeout(function(){if(!ready)setStatus('⚠️ Chưa nhận READY từ VOICE_GATE. Kiểm tra URL /exec và quyền nhúng iframe.');},15000);
 })();
-</script>
-</body></html>
+</script></body></html>
