@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Thử micro tự gửi - chỉ đọc</title>
+<style>
+body{font:17px system-ui;background:#f5f7fb;margin:0;padding:18px;color:#17324a}main{max-width:600px;margin:auto;background:white;padding:22px;border-radius:16px;box-shadow:0 2px 12px #0001}input,button{box-sizing:border-box;width:100%;padding:14px;font:inherit;border-radius:10px;margin:8px 0}input{border:1px solid #ccd4dd}button{border:0;background:#6745bd;color:white;font-weight:700}button.secondary{background:#147c81}#status{background:#edf3f7;padding:15px;border-radius:10px;overflow-wrap:anywhere}small{color:#566;display:block;line-height:1.5}
+</style></head><body><main>
+<h2>🎙️ Thử tự gửi lệnh</h2>
+<p><b>READ_ONLY.</b> Bấm micro và nói. Trang tự gửi biểu mẫu, không mở tab mới.</p>
+<label>URL /exec của <b>dự án Apps Script thử nghiệm riêng</b><input id="url" type="url" placeholder="https://script.google.com/macros/s/.../exec"></label>
+<button id="mic">🎙️ Bấm để nói và tự gửi</button>
+<button id="test" class="secondary">🔎 Thử gửi câu cố định (không cần micro)</button>
+<p id="status" role="status">Chưa thử</p>
+<p><b>Câu đã nghe:</b> <span id="heard">Chưa có</span></p>
+<small>Nếu quá 12 giây không nhận phản hồi, biểu mẫu có thể đã gửi thành công nhưng iframe/postMessage bị Google chặn. Đây là bài kiểm tra, chưa phải xác nhận cập nhật món.</small>
+<form id="form" method="POST" target="voice_form_receiver" style="display:none"><input name="spoken" id="spoken"><input name="requestId" id="requestId"></form>
+<iframe name="voice_form_receiver" id="receiver" title="Phản hồi thử nghiệm Apps Script" style="width:1px;height:1px;position:absolute;left:-9999px;border:0"></iframe>
+</main><script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  let pending=null;
+  const allowedOrigins=new Set(['https://script.google.com','https://script.googleusercontent.com']);
+  function status(s){$('status').textContent=s;}
+  function submitSpoken(s){
+    const u=$('url').value.trim();
+    if(!/^https:\/\/script\.google\.com\/macros\/s\/[^/?#]+\/exec\/?$/.test(u)){status('❌ Cần URL /exec của dự án Apps Script THỬ NGHIỆM, không có tham số.');return;}
+    if(pending){status('⏳ Đang chờ yêu cầu trước, vui lòng đợi.');return;}
+    const id='vf_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,14);
+    pending={id:id};
+    $('spoken').value=s;$('requestId').value=id;$('heard').textContent=s;
+    $('form').action=u;
+    status('⏳ Đã gửi biểu mẫu, đang chờ Apps Script phản hồi...');
+    $('form').submit();
+    setTimeout(function(){if(pending&&pending.id===id){pending=null;status('⚠️ Chưa nhận được phản hồi tự động sau 12 giây. Chưa kết luận biểu mẫu gửi thất bại.');}},12000);
+  }
+  window.addEventListener('message',function(ev){
+    if(!allowedOrigins.has(ev.origin))return;
+    const d=ev.data;
+    if(!d||d.type!=='CANTEEN_VOICE_FORM_RESULT'||!pending||d.requestId!==pending.id)return;
+    pending=null;
+    status(d.ok?'✅ Apps Script đã nhận: '+d.spoken+' (READ_ONLY, không ghi Sheets).':'❌ Apps Script báo: '+d.message);
+  });
+  $('test').onclick=()=>submitSpoken('Hết thịt kho măng');
+  $('mic').onclick=function(){
+    if(!SR){status('Trình duyệt không hỗ trợ SpeechRecognition.');return;}
+    if(pending){status('⏳ Đang chờ phản hồi của lệnh trước.');return;}
+    const r=new SR();r.lang='vi-VN';r.interimResults=false;r.maxAlternatives=1;
+    r.onresult=e=>submitSpoken(e.results[0][0].transcript);
+    r.onerror=e=>status('Lỗi micro: '+e.error);
+    r.start();status('🎤 Đang nghe...');
+  };
+})();
+</script></body></html>
